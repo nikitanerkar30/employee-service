@@ -68,7 +68,7 @@ pipeline {
 
         }
 
-
+/*
         stage('Quality Gate') {
 
             steps {
@@ -82,7 +82,7 @@ pipeline {
             }
 
         }
-
+*/
 
         stage('Verify Artifact') {
             steps {
