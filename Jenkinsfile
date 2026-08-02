@@ -103,7 +103,6 @@ pipeline{
                 withSonarQubeEnv('sonarqube'){
                 sh'''
                 mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
-                
                 -Dsonar.projectKey=employee-service \
                 -Dsonar.projectName="Employee Service"
                 '''
