@@ -1,121 +1,159 @@
-pipeline {
-
+pipeline{
     agent any
 
     tools {
         maven 'Maven-3.9.9'
     }
 
-    environment {
-        APP_NAME       = 'Employee Service'
-        IMAGE_NAME     = 'nikitaharesh/employee-service'
-        LATEST_TAG     = 'latest'
-        CONTAINER_NAME = 'employee-service'
+    options{
+        timestamps()
+        disableConcurrentBuilds()
+
+        buildDiscarder(logRotator(
+            numToKeepStr: '20',
+            artifactNumToKeepStr: '10'
+        ))
+
+        timeout(time:30, unit: 'MINUTES')
     }
 
-    stages {
+    environment {
 
-        stage('Checkout Source') {
-            steps {
-                echo "===== CHECKOUT SOURCE CODE ====="
+        APP_NAME = 'Employee Service'
+        IMAGE_NAME = 'nikitaharesh/employee-service'
+        CONTAINER_NAME = 'employee-service'
+        LATEST_TAG   = 'latest'
+    }
+
+    stages{
+        stage('Checkout Source Code'){
+            steps{
+                echo "=====CHECKOUT SOURCE ======"
                 checkout scm
             }
         }
 
-
-        stage('Display Git Information') {
+        stage('Display Git Information'){
             steps {
+                script {
+                    env.GIT_COMMIT_SHORT= sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+
+                    ).trim()
+
+                    env.IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT_SHORT}"
+
+                }
+
                 sh '''
-                echo "Branch : $BRANCH_NAME"
-                git log -1 --oneline
-                git log -1 --pretty=format:"Author : %an"
+                echo "=============GIT INFORMATION=========="
+                echo "Branch  : $BRANCH_NAME"
+
+                git log -1 --pretty=format:"Commit   :%H"
                 echo
-                git log -1 --pretty=format:"Commit : %H"
+                git log -1 --pretty=format:"Author   :%an"
                 echo
-                git log -1 --pretty=format:"Message : %s"
+
+                git log -1 --pretty=format:"Messahe  :%s"
+                echo
+
+
+                echo "Short Commit: $GIT_COMMIT_SHORT"
+
                 '''
             }
         }
 
+        stage('Build Application'){
+            steps{
+                echo "=======BUILD APPLICATION======"
 
-        stage('Build Application') {
-            steps {
-                sh '''
-                echo "===== BUILDING APPLICATION ====="
-                mvn clean package -DskipTests
+                sh'''
+                mvn clean package
                 '''
             }
         }
 
-
-        stage('SonarQube Code Analysis') {
-
-            steps {
-
-                echo "===== SONARQUBE ANALYSIS ====="
-
-                withSonarQubeEnv('sonarqube') {
-
-                    sh '''
-                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                    -Dsonar.projectKey=employee-service \
-                    -Dsonar.projectName="Employee Service"
-                    '''
-
-                }
-
+        stage('Publish Test Results'){
+            steps{
+                junit allowEmptyResults: true,
+                     testResults: 'target/surefire-reports/*.xml'
             }
-
         }
 
+        stage('Archive JAR Artifact'){
 
-        stage('Quality Gate') {
+            steps{
 
-            steps {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
 
-                timeout(time: 5, unit: 'MINUTES') {
-
-                    waitForQualityGate abortPipeline: true
-
-                }
-
-            }
-
-        }
-
-
-        stage('Verify Artifact') {
-            steps {
-                sh '''
-                echo "===== VERIFY ARTIFACT ====="
+                sh'''
+                echo "=========TARGET========"
                 ls -lh target
                 '''
             }
+
         }
 
+        stage('SonarQube Analysis'){
+            steps{
+                echo "======SONARQUBE ANALYSIS======"
 
-        stage('Build Docker Image') {
-            steps {
-                sh '''
-                docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                withSonarQubeEnv('sonarqube'){
+                sh'''
+                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar
+                
+                -Dsonar.projectKey=employee-service \
+                -Dsonar.projectName="Employee Service"
                 '''
+                }
+
+
             }
         }
 
+        stage('Quality Gate'){
 
-        stage('Docker Hub Login') {
+            steps{
+                timeout(time: 5, unit: 'MINUTES'){
 
-            steps {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
 
+        stage('Build Docker Image'){
+             steps{
+                sh'''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker tag ${IMAGE_NAME}:${IMAGE_TAG}  ${IMAGE_NAME}:${LATEST_TAG}
+                '''
+             }
+        }
+
+        stage('Verify Docker Images'){
+
+            steps{
+
+                sh'''
+                docker images | grep employee-service
+                '''
+            }
+
+
+        }
+
+        stage('Docker Hub Login'){
+            steps{
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-credential',
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )
-                ]) {
-
-                    sh '''
+                ]){
+                    sh'''
                     echo "$DOCKER_PASS" | docker login \
                     -u "$DOCKER_USER" \
                     --password-stdin
@@ -124,106 +162,129 @@ pipeline {
             }
         }
 
-
-        stage('Push Version Image') {
-
-            steps {
-
-                sh '''
-                docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-                '''
-
+        stage('Push Version Image'){
+            steps{
+                retry(3){
+                    sh'''
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
             }
         }
 
+        stage('Push Latest Image'){
+            steps{
 
-        stage('Tag Latest Image') {
-
-            steps {
-
-                sh '''
-                docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:${LATEST_TAG}
-                docker push ${IMAGE_NAME}:${LATEST_TAG}
-                '''
-
+                retry(3){
+                  sh'''
+                  docker push ${IMAGE_NAME}:${LATEST_TAG}
+                  '''
+                }
             }
         }
 
+        stage('Remove Old Container'){
 
-        stage('Remove Existing Container') {
-
-            when {
+            when{
                 branch 'main'
             }
 
-            steps {
+            steps{
 
-                sh '''
+                sh'''
                 docker rm -f ${CONTAINER_NAME} || true
                 '''
-
             }
+
         }
 
+        stage('Deploy Docker Container'){
 
-        stage('Deploy Container') {
-
-            when {
+            when{
                 branch 'main'
             }
 
-            steps {
-
-                sh '''
+            steps{
+                sh'''
                 docker run -d \
                 --name ${CONTAINER_NAME} \
                 -p 8085:8080 \
-                ${IMAGE_NAME}:${BUILD_NUMBER}
+                ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
-
             }
         }
 
-
-        stage('Verify Container') {
-
+        stage('Verify Deployment'){
             when {
                 branch 'main'
             }
 
             steps {
+                sh'''
 
-                sh '''
+                echo "========RUNNING CONTAINERS======"
                 docker ps
-                '''
 
+                echo
+
+                docker inspect ${CONTAINER_NAME}  \
+                --format='{{.State.Status}}'
+                '''
             }
+
+        
         }
 
+        stage ('Build Summary'){
+            steps {
+
+                sh '''
+                echo ""
+                echo "========================================="
+                echo "Application     : ${APP_NAME}"
+                echo "Branch          : ${BRANCH_NAME}"
+                echo "Build Number    : ${BUILD_NUMBER}"
+                echo "Git Commit      : ${GIT_COMMIT_SHORT}"
+                echo "Docker Image    : ${IMAGE_NAME}:${IMAGE_TAG}"
+                echo "Latest Tag      : ${IMAGE_NAME}:${LATEST_TAG}"
+                echo "Workspace       : ${WORKSPACE}"
+                echo "Node            : ${NODE_NAME}"
+                echo "Build URL       : ${BUILD_URL}"
+                echo "========================================="
+                '''
+            }
+        }
     }
 
-
-    post {
+        post {
 
         success {
 
-            echo "Pipeline completed successfully."
+            echo "================================="
+            echo "PIPELINE COMPLETED SUCCESSFULLY"
+            echo "================================="
 
         }
-
 
         failure {
 
-            echo "Pipeline failed."
+            echo "================================="
+            echo "PIPELINE FAILED"
+            echo "================================="
 
         }
-
 
         always {
 
             sh '''
 
+            echo "========= DOCKER IMAGES ========="
+
             docker images | grep employee-service || true
+
+            echo
+
+            echo "========= RUNNING CONTAINERS ========="
 
             docker ps || true
 
@@ -236,5 +297,6 @@ pipeline {
         }
 
     }
+
 
 }
