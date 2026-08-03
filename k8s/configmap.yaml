@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+   name: employee-config
+   namespace: employee-dev
+data: 
+   APP_ENV: dev
+   SERVER_PORT: "8080"
+
