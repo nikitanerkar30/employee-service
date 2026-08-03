@@ -109,34 +109,26 @@ pipeline{
             }
         }
 
-        stage('Post Build Activities'){
-
-            parallel {
-                 stage('Publish Test Results'){
-                    steps{
-                        junit allowEmptyResults: true,
-                            testResults: 'target/surefire-reports/*.xml'
-                    }
-                }
-
-                stage('Archive JAR Artifact'){
-
-                    steps{
-
-                        archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-
-                        sh'''
-                        echo "=========TARGET========"
-                        ls -lh target
-                        '''
-                    }
-
-        }
-
+        stage('Publish Test Results'){
+            steps{
+                junit allowEmptyResults: true,
+                     testResults: 'target/surefire-reports/*.xml'
             }
         }
 
+        stage('Archive JAR Artifact'){
 
+            steps{
+
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+
+                sh'''
+                echo "=========TARGET========"
+                ls -lh target
+                '''
+            }
+
+        }
 
         stage('SonarQube Analysis'){
             when {
@@ -237,7 +229,7 @@ pipeline{
             }
         }
 
- /*       stage('Remove Old Container'){
+        stage('Remove Old Container'){
 
             when{
                 branch 'main'
@@ -276,39 +268,11 @@ pipeline{
                 '''
             }
         }
-*/
-
-stage('Deploy using Docker Compose'){
-
-    when{
-        allOf {
-            branch 'main'
-            expression{params.DEPLOY}
-        }
-    }
-
-    steps{
-
-        echo "===============Deploying using Docker compose=========="
-        sh '''
-        export IMAGE_TAG=${IMAGE_TAG}
-        docker compose down || true
-        docker compose up -d
-        '''
-    }
-  }
-
-
-
-
 
         stage('Verify Deployment'){
-                when {
-                    allOf {
-                        branch 'main'
-                        expression { params.DEPLOY }
-                    }
-                }
+            when {
+                branch 'main'
+            }
 
             steps {
                 sh'''

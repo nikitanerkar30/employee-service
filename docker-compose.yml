@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  employee-service:
+    image: nikitaharesh/employee-service:${IMAGE_TAG}
+    container_name: employee-service
+    ports:
+      - "8085:8080"
+    restart: unless-stopped
