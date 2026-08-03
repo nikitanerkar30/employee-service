@@ -292,6 +292,7 @@ stage('Deploy using Docker Compose'){
         echo "===============Deploying using Docker compose=========="
         sh '''
         export IMAGE_TAG=${IMAGE_TAG}
+        docker rm -f employee-service || true
         docker compose down || true
         docker compose up -d
         '''
