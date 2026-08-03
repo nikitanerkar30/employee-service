@@ -25,40 +25,6 @@ pipeline{
         LATEST_TAG   = 'latest'
     }
 
-
-    parameters {
-
-    choice(
-        name: 'DEPLOY_ENV',
-        choices: ['DEV', 'QA', 'UAT', 'PROD'],
-        description: 'Select deployment environment'
-    )
-
-    booleanParam(
-        name: 'DEPLOY',
-        defaultValue: true,
-        description: 'Deploy application?'
-    )
-
-    booleanParam(
-        name: 'PUSH_IMAGE',
-        defaultValue: true,
-        description: 'Push Docker image to Docker Hub?'
-    )
-
-    booleanParam(
-        name: 'RUN_SONAR',
-        defaultValue: true,
-        description: 'Run SonarQube analysis?'
-    )
-
-    string(
-        name: 'CUSTOM_TAG',
-        defaultValue: '',
-        description: 'Optional custom Docker tag'
-    )
-}
-
     stages{
         stage('Checkout Source Code'){
             steps{
@@ -131,12 +97,6 @@ pipeline{
         }
 
         stage('SonarQube Analysis'){
-            when {
-        expression {
-            params.RUN_SONAR
-             }
-          }
-
             steps{
                 echo "======SONARQUBE ANALYSIS======"
 
@@ -202,13 +162,6 @@ pipeline{
         }
 
         stage('Push Version Image'){
-
-             when {
-            expression {
-                params.PUSH_IMAGE
-            }
-        }
-
             steps{
                 retry(3){
                     sh'''
@@ -246,18 +199,9 @@ pipeline{
 
         stage('Deploy Docker Container'){
 
-          when {
-
-            allOf {
-
+            when{
                 branch 'main'
-
-                expression {
-                    params.DEPLOY
-                }
             }
-          }
-
 
             steps{
                 sh'''
@@ -305,12 +249,6 @@ pipeline{
                 echo "Workspace       : ${WORKSPACE}"
                 echo "Node            : ${NODE_NAME}"
                 echo "Build URL       : ${BUILD_URL}"
-                echo "========================================="
-                echo "Deployment Environment : ${params.DEPLOY_ENV}"
-                echo "Deploy Enabled         : ${params.DEPLOY}"
-                echo "Push Docker Image      : ${params.PUSH_IMAGE}"
-                echo "Run SonarQube          : ${params.RUN_SONAR}"
-                echo "Custom Tag             : ${params.CUSTOM_TAG}"
                 echo "========================================="
                 '''
             }
