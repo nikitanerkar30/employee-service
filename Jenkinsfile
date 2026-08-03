@@ -293,6 +293,13 @@ pipeline{
         stage ('Build Summary'){
             steps {
 
+                echo "Deployment Environment : ${params.DEPLOY_ENV}"
+                echo "Deploy Enabled         : ${params.DEPLOY}"
+                echo "Push Docker Image      : ${params.PUSH_IMAGE}"
+                echo "Run SonarQube          : ${params.RUN_SONAR}"
+                echo "Custom Tag             : ${params.CUSTOM_TAG}"
+                echo "========================================="
+
                 sh '''
                 echo ""
                 echo "========================================="
@@ -306,12 +313,7 @@ pipeline{
                 echo "Node            : ${NODE_NAME}"
                 echo "Build URL       : ${BUILD_URL}"
                 echo "========================================="
-                echo "Deployment Environment : ${params.DEPLOY_ENV}"
-                echo "Deploy Enabled         : ${params.DEPLOY}"
-                echo "Push Docker Image      : ${params.PUSH_IMAGE}"
-                echo "Run SonarQube          : ${params.RUN_SONAR}"
-                echo "Custom Tag             : ${params.CUSTOM_TAG}"
-                echo "========================================="
+
                 '''
             }
         }
